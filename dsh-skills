@@ -15,7 +15,8 @@ Usage:
   dsh-skills list                  List global and project skills
   dsh-skills install <source>      Install from owner/repo, a git URL, or a local directory
              [--name <name>] [--subdir <path>] [--force]
-  dsh-skills update <name>         Reinstall from the recorded source (backs up first)
+  dsh-skills update <name>         Check the recorded source, update only when needed
+  dsh-skills check <name>          Print the update status for one skill
   dsh-skills disable <name>        Move a global skill out of the catalog
   dsh-skills enable <name>         Restore a disabled global skill
   dsh-skills remove <name>         Move a global skill to .system/trash
@@ -128,6 +129,112 @@ cmd_list() {
   printf '\nGlobal root: %s\n' "$SKILLS_DIR"
 }
 
+meta_value() { sed -n "s/^$1=//p" "$2" | sed -n '1p'; }
+
+source_url() {
+  case "$1" in
+    http://*|https://*|git@*|ssh://*) printf '%s' "$1" ;;
+    */*) printf 'https://github.com/%s.git' "$1" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# True when the first dotted version is newer than the second.
+version_gt() {
+  [ -n "$1" ] || return 1
+  [ -n "$2" ] || return 0
+  [ "$1" = "$2" ] && return 1
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".");
+    for (i = 1; i <= n || i <= m; i++) {
+      ai = (i <= n ? x[i] : 0) + 0;
+      bi = (i <= m ? y[i] : 0) + 0;
+      if (ai > bi) exit 0;
+      if (ai < bi) exit 1;
+    }
+    exit 1;
+  }'
+}
+
+# Print up-to-date, update-available, or check-failed for one installed skill.
+check_update() {
+  local name="$1" dir="$2" meta="$3"
+  local source subdir local_commit remote_commit url
+  source=$(meta_value source "$meta")
+  subdir=$(meta_value subdir "$meta")
+  [ -n "$source" ] || { printf 'check-failed\n'; return 1; }
+
+  if [ -d "$source" ]; then
+    local compare="$source"
+    [ -n "$subdir" ] && compare="$source/$subdir"
+    [ -d "$compare" ] || { printf 'check-failed\n'; return 1; }
+    if diff -qr -x .dsh-skill-source -x .git -x .DS_Store "$compare" "$dir" >/dev/null 2>&1; then
+      printf 'up-to-date\n'
+    else
+      printf 'update-available\n'
+    fi
+    return 0
+  fi
+
+  case "$source" in
+    http://*|https://*|git@*|ssh://*|*/*) ;;
+    *) printf 'up-to-date\n'; return 0 ;;
+  esac
+
+  url=$(source_url "$source")
+  remote_commit=$(git ls-remote "$url" HEAD 2>/dev/null | awk 'NR==1{print $1}')
+  [ -n "$remote_commit" ] || { printf 'check-failed\n'; return 1; }
+
+  local_commit=$(meta_value commit "$meta")
+  if [ -n "$local_commit" ]; then
+    if [ "$local_commit" = "$remote_commit" ]; then
+      printf 'up-to-date\n'
+    else
+      printf 'update-available\n'
+    fi
+    return 0
+  fi
+
+  # No recorded commit (older install): compare SKILL.md versions from a
+  # sparse clone, then remember this commit for fast checks next time.
+  local tmp
+  tmp=$(mktemp -d)
+  (
+    trap 'rm -rf "$tmp"' EXIT
+    if ! git clone --depth 1 --filter=blob:none --sparse "$url" "$tmp/repo" >/dev/null 2>&1; then
+      if ! git clone --depth 1 "$url" "$tmp/repo" >/dev/null 2>&1; then
+        printf 'check-failed\n'
+        exit 0
+      fi
+    fi
+    if [ -n "$subdir" ]; then
+      git -C "$tmp/repo" sparse-checkout set "$subdir" >/dev/null 2>&1 || true
+    fi
+    local candidate="$tmp/repo"
+    [ -n "$subdir" ] && candidate="$tmp/repo/$subdir"
+    if [ ! -f "$candidate/SKILL.md" ]; then
+      local found
+      found=$(find "$tmp/repo" -maxdepth 2 -name SKILL.md -not -path '*/.git/*' 2>/dev/null | sed -n '1p')
+      [ -n "$found" ] && candidate=$(dirname "$found")
+    fi
+    if [ ! -f "$candidate/SKILL.md" ]; then
+      printf 'check-failed\n'
+      exit 0
+    fi
+    local remote_version local_version
+    remote_version=$(skill_version "$candidate")
+    local_version=$(skill_version "$dir")
+    if version_gt "$remote_version" "$local_version"; then
+      printf 'update-available\n'
+    else
+      if ! grep -q '^commit=' "$meta"; then
+        printf 'commit=%s\n' "$remote_commit" >> "$meta"
+      fi
+      printf 'up-to-date\n'
+    fi
+  )
+}
+
 cmd_install() {
   local source="" name="" subdir="" force=0
   while [ $# -gt 0 ]; do
@@ -183,10 +290,30 @@ cmd_install() {
       backup_dir "$dest" "$name"
     fi
     cp -R "$candidate/." "$dest/"
-    printf 'source=%s\nsubdir=%s\nmode=%s\ninstalled_at=%s\n' \
-      "$source" "$subdir" "$mode" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$dest/.dsh-skill-source"
+    local commit=""
+    if [ "$mode" = "git" ]; then
+      commit=$(git -C "$root" rev-parse HEAD 2>/dev/null || true)
+    fi
+    printf 'source=%s\nsubdir=%s\nmode=%s\ncommit=%s\ninstalled_at=%s\n' \
+      "$source" "$subdir" "$mode" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$dest/.dsh-skill-source"
     printf 'installed %s -> %s\n' "$name" "$dest"
   )
+}
+
+cmd_check() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "check needs a skill name"
+  local dir="$SKILLS_DIR/$name" meta="$SKILLS_DIR/$name/.dsh-skill-source"
+  [ -d "$dir" ] || die "global skill not found: $name"
+  [ -f "$meta" ] || die "no .dsh-skill-source for '$name'"
+  local status
+  status=$(check_update "$name" "$dir" "$meta" || true)
+  printf 'STATUS=%s\n' "$status"
+  case "$status" in
+    up-to-date) return 0 ;;
+    update-available) return 10 ;;
+    *) return 1 ;;
+  esac
 }
 
 cmd_update() {
@@ -195,13 +322,26 @@ cmd_update() {
   local dir="$SKILLS_DIR/$name" meta="$SKILLS_DIR/$name/.dsh-skill-source"
   [ -d "$dir" ] || die "global skill not found: $name"
   [ -f "$meta" ] || die "no .dsh-skill-source for '$name'; reinstall it manually"
-  local source subdir
-  source=$(sed -n 's/^source=//p' "$meta" | sed -n '1p')
-  subdir=$(sed -n 's/^subdir=//p' "$meta" | sed -n '1p')
+  local source subdir status
+  source=$(meta_value source "$meta")
+  subdir=$(meta_value subdir "$meta")
   [ -n "$source" ] || die "source is empty in $meta"
+  status=$(check_update "$name" "$dir" "$meta" || true)
+  case "$status" in
+    up-to-date)
+      printf 'STATUS=up-to-date\n'
+      return 0
+      ;;
+    update-available)
+      ;;
+    *)
+      die "could not check for updates: $name"
+      ;;
+  esac
   local args=("$source" --name "$name" --force)
   [ -n "$subdir" ] && args+=(--subdir "$subdir")
   cmd_install "${args[@]}"
+  printf 'STATUS=updated\n'
 }
 
 cmd_disable() {
@@ -308,6 +448,7 @@ main() {
     list) cmd_list ;;
     install) cmd_install "$@" ;;
     update) cmd_update "$@" ;;
+    check) cmd_check "$@" ;;
     disable) cmd_disable "$@" ;;
     enable) cmd_enable "$@" ;;
     remove|uninstall) cmd_remove "$@" ;;

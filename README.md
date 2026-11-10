@@ -12,7 +12,7 @@ A visual manager for local DSH skills, rendered as a left-sidebar panel. Manage 
 - **启用 / 停用**：停用的技能移到 `.system/disabled`，随时可恢复
 - **卸载**：默认移到 `.system/trash`，可手动恢复；不会直接删除文件
 - **安装**：支持 `owner/repo`、GitHub URL 或本地目录，可选子目录/名称
-- **更新**：按安装时记录的来源重新拉取（先备份旧版本）
+- **更新**：先检查来源，没有新版本时提示「已是最新」，只有存在更新才重新拉取（先备份旧版本）
 - **快捷操作**：打开目录、在文件管理器中显示、复制 Markdown、复制试用提示
 - **明暗主题**：全部使用 DSH 主题令牌；开关、按钮与「插件」页保持同一套样式
 
@@ -90,8 +90,11 @@ skill-manager-for-DSH/
 ./dsh-skills disable <name>
 ./dsh-skills enable <name>
 ./dsh-skills remove <name>
+./dsh-skills check <name>
 ./dsh-skills doctor
 ```
+
+`check` 会输出 `STATUS=up-to-date` 或 `STATUS=update-available`；`update` 内部会先做同样的检查，无更新时不会重装。
 
 ## 卸载
 

@@ -53,6 +53,8 @@ window.__ModuleLoader__.load({
         cancel: '取消',
         installedToast: '安装完成',
         updatedToast: '已更新',
+        upToDate: '已是最新',
+        checkingUpdate: '正在检查更新…',
         openRoot: '打开技能目录',
         rootHint: '全局目录：~/.dsh/skills',
         detailFailed: '无法加载技能内容',
@@ -108,6 +110,8 @@ window.__ModuleLoader__.load({
         cancel: 'Cancel',
         installedToast: 'Installed',
         updatedToast: 'Updated',
+        upToDate: 'Already up to date',
+        checkingUpdate: 'Checking for updates…',
         openRoot: 'Open skills folder',
         rootHint: 'Global folder: ~/.dsh/skills',
         detailFailed: 'Could not load the skill',
@@ -564,11 +568,16 @@ window.__ModuleLoader__.load({
         if (!detail || busy !== '') return
         setBusy('update')
         try {
-          await api('/update', {
+          const result = await api('/update', {
             method: 'POST',
             body: JSON.stringify({ name: detail.name }),
           })
           setMenuOpen(false)
+          const output = String(result && result.output ? result.output : '')
+          if (output.includes('STATUS=up-to-date')) {
+            notify(t('upToDate'))
+            return
+          }
           await openDetail(detail)
           await load(true)
           notify(t('updatedToast'))
@@ -890,7 +899,7 @@ window.__ModuleLoader__.load({
                             h('button', { type: 'button', role: 'menuitem', onClick: () => reveal('finder') }, t('reveal')),
                             h('button', { type: 'button', role: 'menuitem', onClick: copyContent }, t('copy')),
                             detail && detail.source
-                              ? h('button', { type: 'button', role: 'menuitem', onClick: update, disabled: busy !== '' }, busy === 'update' ? t('updating') : t('update'))
+                              ? h('button', { type: 'button', role: 'menuitem', onClick: update, disabled: busy !== '' }, busy === 'update' ? t('checkingUpdate') : t('update'))
                               : null,
                           )
                         : null,
