@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="skill-manager-icon-title">
+  <title id="skill-manager-icon-title">Skill Manager</title>
+  <defs>
+    <linearGradient id="skill-manager-icon-gradient" x1="12" y1="10" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="0.5" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#EEF2FF"/>
+  <path d="M32 12 50 21v20L32 50 14 41V21z" fill="url(#skill-manager-icon-gradient)"/>
+  <path d="M32 12 50 21 32 30 14 21z" fill="#FFFFFF" fill-opacity="0.55"/>
+  <path d="M32 30v20M14 21l18 9 18-9" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="2"/>
+</svg>

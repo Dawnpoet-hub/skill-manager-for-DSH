@@ -1,0 +1,323 @@
+#!/bin/bash
+# dsh-skills — one entry point for the local DSH skill catalog.
+# Manages user-level skills under ~/.dsh/skills and reports project skills.
+set -euo pipefail
+
+SKILLS_DIR="${DSH_SKILLS_DIR:-$HOME/.dsh/skills}"
+SYSTEM_DIR="$SKILLS_DIR/.system"
+PROJECT_DIR="${PWD}"
+
+usage() {
+  cat <<'EOF'
+dsh-skills — manage local DSH skills
+
+Usage:
+  dsh-skills list                  List global and project skills
+  dsh-skills install <source>      Install from owner/repo, a git URL, or a local directory
+             [--name <name>] [--subdir <path>] [--force]
+  dsh-skills update <name>         Reinstall from the recorded source (backs up first)
+  dsh-skills disable <name>        Move a global skill out of the catalog
+  dsh-skills enable <name>         Restore a disabled global skill
+  dsh-skills remove <name>         Move a global skill to .system/trash
+             [--purge]             Delete it instead of keeping a backup
+  dsh-skills path <name>           Print a skill's directory
+  dsh-skills doctor                Validate names, frontmatter, and duplicates
+  dsh-skills open                  Open the global skills folder (macOS)
+  dsh-skills version
+
+Global root:  $HOME/.dsh/skills
+Project roots: ./.dsh/skills and ./.agents/skills
+EOF
+}
+
+die() { printf 'dsh-skills: %s\n' "$*" >&2; exit 1; }
+
+valid_name() {
+  case "$1" in
+    ''|*[!a-z0-9-]*) return 1 ;;
+    -*) return 1 ;;
+    *-) return 1 ;;
+    *--*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Read a top-level frontmatter scalar or folded block scalar.
+fm_field() {
+  local key="$1" file="$2"
+  awk -v key="$key" '
+    NR == 1 && $0 == "---" { fm = 1; next }
+    fm && $0 == "---" { exit }
+    fm && tolower($0) ~ "^" key ":" {
+      line = $0
+      sub("^" key ":[[:space:]]*", "", line)
+      if (line == ">-" || line == ">" || line == "|" || line == "|-") { block = 1; next }
+      gsub(/^["'\'']|["'\'']$/, "", line)
+      print line
+      exit
+    }
+    block {
+      if ($0 ~ /^[[:space:]]+/) { sub(/^[[:space:]]+/, "", $0); printf "%s ", $0; next }
+      exit
+    }
+  ' "$file" | sed 's/[[:space:]]*$//'
+}
+
+skill_name() { fm_field name "$1/SKILL.md"; }
+skill_desc() { fm_field description "$1/SKILL.md"; }
+skill_version() { fm_field version "$1/SKILL.md"; }
+
+# Resolve the directory containing SKILL.md for a fetched source.
+resolve_skill_dir() {
+  local root="$1" subdir="$2"
+  if [ -n "$subdir" ]; then
+    [ -f "$root/$subdir/SKILL.md" ] || die "no SKILL.md at subdir '$subdir'"
+    printf '%s' "$root/$subdir"
+    return 0
+  fi
+  if [ -f "$root/SKILL.md" ]; then
+    printf '%s' "$root"
+    return 0
+  fi
+  local found count
+  found=$(find "$root" -maxdepth 2 -name SKILL.md -not -path '*/.git/*' 2>/dev/null | sed -n '1,10p')
+  count=$(printf '%s\n' "$found" | sed '/^$/d' | wc -l | tr -d ' ')
+  if [ "$count" = "1" ]; then
+    dirname "$found"
+    return 0
+  fi
+  if [ "$count" = "0" ]; then
+    die "no SKILL.md found in the source"
+  fi
+  die "found $count SKILL.md files; pass --subdir. Candidates:
+$found"
+}
+
+backup_dir() {
+  local dir="$1" name="$2"
+  mkdir -p "$SYSTEM_DIR/backups"
+  local dest="$SYSTEM_DIR/backups/${name}-$(date +%Y%m%d-%H%M%S)"
+  mv "$dir" "$dest"
+  printf 'backup: %s\n' "$dest"
+}
+
+print_root() {
+  local scope="$1" root="$2"
+  [ -d "$root" ] || return 0
+  local d base name version desc
+  for d in "$root"/*/; do
+    [ -d "$d" ] || continue
+    base=$(basename "$d")
+    case "$base" in .*) continue ;; esac
+    [ -f "$d/SKILL.md" ] || continue
+    name=$(skill_name "${d%/}")
+    [ -n "$name" ] || name="$base"
+    version=$(skill_version "${d%/}")
+    desc=$(skill_desc "${d%/}")
+    printf '%-7s %-26s %-10s %s\n' "$scope" "$name" "${version:--}" "$desc"
+    printf '        %s\n' "${d%/}"
+  done
+}
+
+cmd_list() {
+  printf '%-7s %-26s %-10s %s\n' 'SCOPE' 'NAME' 'VERSION' 'DESCRIPTION'
+  printf '%-7s %-26s %-10s %s\n' '-----' '----' '-------' '-----------'
+  print_root global "$SKILLS_DIR"
+  print_root project "$PROJECT_DIR/.dsh/skills"
+  print_root project "$PROJECT_DIR/.agents/skills"
+  printf '\nGlobal root: %s\n' "$SKILLS_DIR"
+}
+
+cmd_install() {
+  local source="" name="" subdir="" force=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name) [ $# -ge 2 ] || die "--name needs a value"; name="$2"; shift 2 ;;
+      --subdir) [ $# -ge 2 ] || die "--subdir needs a value"; subdir="$2"; shift 2 ;;
+      --force) force=1; shift ;;
+      -h|--help) usage; return 0 ;;
+      --*) die "unknown option: $1" ;;
+      *) [ -z "$source" ] || die "unexpected argument: $1"; source="$1"; shift ;;
+    esac
+  done
+  [ -n "$source" ] || die "install needs a source"
+
+  local tmp
+  tmp=$(mktemp -d)
+  (
+    trap 'rm -rf "$tmp"' EXIT
+    local root="" mode="local"
+    case "$source" in
+      http://*|https://*|git@*|ssh://*)
+        git clone --depth 1 "$source" "$tmp/repo" >/dev/null 2>&1 || die "git clone failed: $source"
+        root="$tmp/repo"
+        mode="git"
+        ;;
+      */*)
+        if [ -d "$source" ]; then
+          root="$source"
+        else
+          git clone --depth 1 "https://github.com/$source.git" "$tmp/repo" >/dev/null 2>&1 \
+            || die "git clone failed: https://github.com/$source.git"
+          root="$tmp/repo"
+          mode="git"
+        fi
+        ;;
+      *)
+        die "source must be a GitHub owner/repo, a git URL, or a local directory"
+        ;;
+    esac
+
+    local candidate
+    candidate=$(resolve_skill_dir "$root" "$subdir")
+    local detected
+    detected=$(skill_name "$candidate")
+    [ -n "$name" ] || name="$detected"
+    [ -n "$name" ] || die "SKILL.md has no name and --name was not given"
+    valid_name "$name" || die "invalid skill name '$name' (lowercase kebab-case required)"
+
+    mkdir -p "$SKILLS_DIR"
+    local dest="$SKILLS_DIR/$name"
+    if [ -e "$dest" ]; then
+      [ "$force" = "1" ] || die "'$name' is already installed at $dest (use --force to replace)"
+      backup_dir "$dest" "$name"
+    fi
+    cp -R "$candidate/." "$dest/"
+    printf 'source=%s\nsubdir=%s\nmode=%s\ninstalled_at=%s\n' \
+      "$source" "$subdir" "$mode" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$dest/.dsh-skill-source"
+    printf 'installed %s -> %s\n' "$name" "$dest"
+  )
+}
+
+cmd_update() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "update needs a skill name"
+  local dir="$SKILLS_DIR/$name" meta="$SKILLS_DIR/$name/.dsh-skill-source"
+  [ -d "$dir" ] || die "global skill not found: $name"
+  [ -f "$meta" ] || die "no .dsh-skill-source for '$name'; reinstall it manually"
+  local source subdir
+  source=$(sed -n 's/^source=//p' "$meta" | sed -n '1p')
+  subdir=$(sed -n 's/^subdir=//p' "$meta" | sed -n '1p')
+  [ -n "$source" ] || die "source is empty in $meta"
+  local args=("$source" --name "$name" --force)
+  [ -n "$subdir" ] && args+=(--subdir "$subdir")
+  cmd_install "${args[@]}"
+}
+
+cmd_disable() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "disable needs a skill name"
+  [ -d "$SKILLS_DIR/$name" ] || die "global skill not found: $name"
+  mkdir -p "$SYSTEM_DIR/disabled"
+  [ -e "$SYSTEM_DIR/disabled/$name" ] && die "already disabled: $name"
+  mv "$SKILLS_DIR/$name" "$SYSTEM_DIR/disabled/$name"
+  printf 'disabled %s\n' "$name"
+}
+
+cmd_enable() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "enable needs a skill name"
+  [ -d "$SYSTEM_DIR/disabled/$name" ] || die "not disabled: $name"
+  [ -e "$SKILLS_DIR/$name" ] && die "a skill named '$name' already exists"
+  mv "$SYSTEM_DIR/disabled/$name" "$SKILLS_DIR/$name"
+  printf 'enabled %s\n' "$name"
+}
+
+cmd_remove() {
+  local name="" purge=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --purge) purge=1; shift ;;
+      -h|--help) usage; return 0 ;;
+      --*) die "unknown option: $1" ;;
+      *) [ -z "$name" ] || die "unexpected argument: $1"; name="$1"; shift ;;
+    esac
+  done
+  [ -n "$name" ] || die "remove needs a skill name"
+  [ -d "$SKILLS_DIR/$name" ] || die "global skill not found: $name"
+  if [ "$purge" = "1" ]; then
+    rm -rf "$SKILLS_DIR/$name"
+    printf 'removed %s (purged)\n' "$name"
+  else
+    mkdir -p "$SYSTEM_DIR/trash"
+    local dest="$SYSTEM_DIR/trash/${name}-$(date +%Y%m%d-%H%M%S)"
+    mv "$SKILLS_DIR/$name" "$dest"
+    printf 'removed %s -> %s\n' "$name" "$dest"
+  fi
+}
+
+cmd_path() {
+  local name="${1:-}"
+  [ -n "$name" ] || die "path needs a skill name"
+  local roots=("$SKILLS_DIR" "$PROJECT_DIR/.dsh/skills" "$PROJECT_DIR/.agents/skills")
+  local root
+  for root in "${roots[@]}"; do
+    [ -d "$root/$name" ] && { printf '%s\n' "$root/$name"; return 0; }
+  done
+  die "skill not found: $name"
+}
+
+cmd_doctor() {
+  local roots=("$SKILLS_DIR" "$PROJECT_DIR/.dsh/skills" "$PROJECT_DIR/.agents/skills")
+  local root d base name desc seen failures=0
+  seen=$(mktemp)
+  trap 'rm -f "${seen:-}"' EXIT
+  for root in "${roots[@]}"; do
+    [ -d "$root" ] || continue
+    for d in "$root"/*/; do
+      [ -d "$d" ] || continue
+      base=$(basename "$d")
+      case "$base" in .*) continue ;; esac
+      if [ ! -f "$d/SKILL.md" ]; then
+        printf 'FAIL  %s  missing SKILL.md\n' "$d"
+        failures=$((failures + 1))
+        continue
+      fi
+      name=$(skill_name "$d")
+      desc=$(skill_desc "$d")
+      if [ -z "$name" ]; then
+        printf 'FAIL  %s  frontmatter has no name\n' "$d"
+        failures=$((failures + 1))
+      elif ! valid_name "$name"; then
+        printf 'FAIL  %s  invalid name %s\n' "$d" "$name"
+        failures=$((failures + 1))
+      elif [ "$name" != "$base" ]; then
+        printf 'WARN  %s  folder is %s but name is %s\n' "$d" "$base" "$name"
+      else
+        printf 'OK    %s  %s\n' "$name" "$d"
+      fi
+      [ -n "$desc" ] || printf 'WARN  %s  description is empty\n' "$d"
+      printf '%s\t%s\n' "$name" "$d" >> "$seen"
+    done
+  done
+  local dup
+  dup=$(cut -f1 "$seen" | sort | uniq -d)
+  if [ -n "$dup" ]; then
+    printf '\nWARN  duplicate skill names across roots:\n%s\n' "$dup"
+  fi
+  printf '\nChecked %s skill(s), %s failure(s).\n' "$(wc -l < "$seen" | tr -d ' ')" "$failures"
+  [ "$failures" = "0" ]
+}
+
+cmd_open() { open "$SKILLS_DIR" 2>/dev/null || xdg-open "$SKILLS_DIR"; }
+
+main() {
+  local cmd="${1:-list}"
+  shift || true
+  case "$cmd" in
+    list) cmd_list ;;
+    install) cmd_install "$@" ;;
+    update) cmd_update "$@" ;;
+    disable) cmd_disable "$@" ;;
+    enable) cmd_enable "$@" ;;
+    remove|uninstall) cmd_remove "$@" ;;
+    path|where) cmd_path "$@" ;;
+    doctor) cmd_doctor ;;
+    open) cmd_open ;;
+    version|--version) printf 'dsh-skills 0.1.0\n' ;;
+    help|-h|--help) usage ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+main "$@"

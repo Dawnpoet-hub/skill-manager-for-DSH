@@ -1,0 +1,53 @@
+{
+  "name": "@local/dsh-skill-manager-panel",
+  "version": "1.0.0",
+  "description": "Visual skill manager panel for DeepSeek Harness",
+  "license": "MIT",
+  "author": "Dawnpoet-hub",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dawnpoet-hub/skill-manager-for-DSH.git"
+  },
+  "homepage": "https://github.com/Dawnpoet-hub/skill-manager-for-DSH#readme",
+  "bugs": {
+    "url": "https://github.com/Dawnpoet-hub/skill-manager-for-DSH/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "skills",
+    "skill-manager"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "dsh-skills",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}
