@@ -11,20 +11,30 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  curatedMetadata,
+  fingerprint as hashContent,
+  translateContent,
+  translateMetadata,
+} from './translation.js'
 
 const API_PREFIX = '/skill-manager'
 const API_TOKEN = 'skm_7c4e1a9b2d6f8c3e5a1b0d9f4c7e2a6b'
 const MAX_BODY_BYTES = 64 * 1024
+const MAX_TRANSLATE_CHARS = 120_000
+const CACHE_VERSION = 1
 
 const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
 const SKILLS_ROOT = path.join(DSH_HOME, 'skills')
 const DISABLED_ROOT = path.join(SKILLS_ROOT, '.system', 'disabled')
+const CACHE_DIR = path.join(DSH_HOME, 'skill-manager')
+const CACHE_FILE = path.join(CACHE_DIR, 'translations.json')
 const BUNDLED_CLI = fileURLToPath(new URL('./dsh-skills', import.meta.url))
 const CLI = process.env.DSH_SKILLS_BIN || BUNDLED_CLI
 const BASH = process.platform === 'win32' ? 'bash' : '/bin/bash'
 
 export function apply(ctx) {
-  const handler = createHandler()
+  const handler = createHandler(ctx)
   ctx.inject(['webServer'], (webCtx) => {
     webCtx.effect(
       () =>
@@ -38,7 +48,7 @@ export function apply(ctx) {
   })
 }
 
-function createHandler() {
+function createHandler(ctx) {
   return async (req, res) => {
     try {
       if (req.headers['x-skm-token'] !== API_TOKEN) return send(res, 403, { error: 'forbidden' })
@@ -59,6 +69,12 @@ function createHandler() {
         if (route === 'api/update') return send(res, 200, await updateSkill(body))
         if (route === 'api/reveal') return send(res, 200, await revealSkill(body))
         if (route === 'api/open-root') return send(res, 200, await openRoot())
+        if (route === 'api/translate-metadata') {
+          return send(res, 200, await translateMetadataFor(ctx, body))
+        }
+        if (route === 'api/translate-skill') {
+          return send(res, 200, await translateSkillFor(ctx, body))
+        }
       }
       send(res, 404, { error: 'not found' })
     } catch (error) {
@@ -92,6 +108,87 @@ async function readJson(req) {
   } catch {
     throw new Error('invalid JSON body')
   }
+}
+
+let cacheState = null
+let cacheLoading = null
+let cacheWrite = Promise.resolve()
+const metadataJobs = new Map()
+const contentJobs = new Map()
+
+async function loadCache() {
+  if (cacheState !== null) return cacheState
+  if (cacheLoading === null) {
+    cacheLoading = (async () => {
+      try {
+        const raw = await fs.readFile(CACHE_FILE, 'utf8')
+        const parsed = JSON.parse(raw)
+        const skills = {}
+        if (parsed && typeof parsed === 'object' && parsed.skills && typeof parsed.skills === 'object') {
+          for (const [name, entry] of Object.entries(parsed.skills)) {
+            if (typeof name === 'string' && entry && typeof entry === 'object') skills[name] = entry
+          }
+        }
+        return { version: CACHE_VERSION, skills }
+      } catch {
+        return { version: CACHE_VERSION, skills: {} }
+      }
+    })()
+  }
+  cacheState = await cacheLoading
+  return cacheState
+}
+
+function saveCache() {
+  const snapshot = JSON.stringify(cacheState, null, 2)
+  cacheWrite = cacheWrite
+    .then(async () => {
+      await fs.mkdir(CACHE_DIR, { recursive: true, mode: 0o700 })
+      const temporary = `${CACHE_FILE}.${process.pid}.tmp`
+      await fs.writeFile(temporary, snapshot, { encoding: 'utf8', mode: 0o600 })
+      await fs.chmod(temporary, 0o600).catch(() => {})
+      await fs.rename(temporary, CACHE_FILE)
+    })
+    .catch((error) => {
+      console.warn('skill-manager-panel: could not save translation cache:', error)
+    })
+  return cacheWrite
+}
+
+function cachedEntry(state, name, fingerprint) {
+  const entry = state.skills[name]
+  if (!entry || entry.fingerprint !== fingerprint) return null
+  return entry
+}
+
+function withTranslations(meta, entry) {
+  return {
+    ...meta,
+    titleZh: entry && typeof entry.title === 'string' ? entry.title : '',
+    descriptionZh: entry && typeof entry.description === 'string' ? entry.description : '',
+    translatedAt: entry && Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+    translationProvider:
+      entry && typeof entry.contentProvider === 'string'
+        ? entry.contentProvider
+        : entry && typeof entry.metaProvider === 'string'
+          ? entry.metaProvider
+          : '',
+    hasTranslation: Boolean(entry),
+  }
+}
+
+function once(map, key, task) {
+  const running = map.get(key)
+  if (running) return running
+  const promise = Promise.resolve()
+    .then(task)
+    .finally(() => map.delete(key))
+  map.set(key, promise)
+  return promise
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function parseFrontmatter(text) {
@@ -175,6 +272,7 @@ async function readMeta(dir, enabled) {
     subdir: source.subdir || '',
     tags,
     updatedAt: stat.mtimeMs,
+    fingerprint: hashContent(text),
   }
 }
 
@@ -197,10 +295,13 @@ async function scanRoot(root, enabled) {
 async function listSkills() {
   const enabled = await scanRoot(SKILLS_ROOT, true)
   const disabled = await scanRoot(DISABLED_ROOT, false)
-  return [...enabled, ...disabled].sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
-    return a.title.localeCompare(b.title)
-  })
+  const state = await loadCache()
+  return [...enabled, ...disabled]
+    .sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
+      return a.title.localeCompare(b.title)
+    })
+    .map((meta) => withTranslations(meta, cachedEntry(state, meta.name, meta.fingerprint)))
 }
 
 function safeName(name) {
@@ -232,7 +333,15 @@ async function readSkill(name) {
   const text = await fs.readFile(path.join(found.dir, 'SKILL.md'), 'utf8')
   const { data, body } = parseFrontmatter(text)
   const meta = await readMeta(found.dir, found.enabled)
-  return { ...meta, frontmatter: data, content: body.slice(0, 400_000) }
+  const state = await loadCache()
+  const entry = cachedEntry(state, meta.name, meta.fingerprint)
+  return {
+    ...withTranslations(meta, entry),
+    frontmatter: data,
+    content: body.slice(0, 400_000),
+    contentZh: entry && typeof entry.content === 'string' ? entry.content : '',
+    contentTranslated: Boolean(entry && typeof entry.content === 'string'),
+  }
 }
 
 function runCli(args, timeout = 180_000) {
@@ -343,4 +452,162 @@ async function openRoot() {
   const result = await runOpen(openSpec(SKILLS_ROOT, false))
   if (!result.ok) throw new Error(result.error)
   return { ok: true }
+}
+
+function translationFailure(error) {
+  const message = errorMessage(error)
+  return message.startsWith('自动翻译') ? message : `自动翻译失败：${message}`
+}
+
+async function mapLimit(items, limit, task) {
+  let index = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const current = index
+      index += 1
+      await task(items[current])
+    }
+  })
+  await Promise.all(workers)
+}
+
+async function translateOneMetadata(ctx, state, meta) {
+  const key = `${meta.name}:${meta.fingerprint}`
+  return once(metadataJobs, key, async () => {
+    const existing = cachedEntry(state, meta.name, meta.fingerprint)
+    const hasTitle = existing && typeof existing.title === 'string' && existing.title !== ''
+    const hasDescription =
+      existing && typeof existing.description === 'string' && existing.description !== ''
+    if (hasTitle && (hasDescription || !meta.description)) {
+      return withTranslations(meta, existing)
+    }
+
+    let result
+    try {
+      result = await translateMetadata(ctx.get('translator'), meta)
+    } catch (error) {
+      const seed = curatedMetadata(meta)
+      if (!seed.title) throw new Error(translationFailure(error))
+      // A failed provider must not be stored as if it were a translation.
+      // Leaving the description empty lets the client show the English one and
+      // lets the next refresh retry once the provider is reachable again.
+      result = {
+        title: seed.title,
+        description: seed.description || '',
+        provider: 'curated',
+      }
+    }
+
+    const entry = {
+      ...(existing || {}),
+      fingerprint: meta.fingerprint,
+      title: result.title,
+      description: result.description,
+      metaProvider: result.provider,
+      updatedAt: Date.now(),
+    }
+    state.skills[meta.name] = entry
+    await saveCache()
+    return withTranslations(meta, entry)
+  })
+}
+
+async function translateMetadataFor(ctx, body) {
+  const names = Array.isArray(body.names)
+    ? [...new Set(body.names.filter((name) => safeName(name)))].slice(0, 120)
+    : []
+  if (names.length === 0) return { skills: [], errors: {} }
+
+  const state = await loadCache()
+  const installed = await listSkills()
+  const byName = new Map(installed.map((meta) => [meta.name, meta]))
+  const errors = {}
+  const updated = []
+
+  await mapLimit(names, 2, async (name) => {
+    const meta = byName.get(name)
+    if (!meta) {
+      errors[name] = '技能不存在'
+      return
+    }
+    try {
+      updated.push(await translateOneMetadata(ctx, state, meta))
+    } catch (error) {
+      errors[name] = translationFailure(error)
+    }
+  })
+
+  updated.sort((a, b) => a.name.localeCompare(b.name))
+  return { skills: updated, errors }
+}
+
+function translatedPayload(meta, entry) {
+  return {
+    name: meta.name,
+    fingerprint: meta.fingerprint,
+    titleZh: entry && typeof entry.title === 'string' ? entry.title : '',
+    descriptionZh: entry && typeof entry.description === 'string' ? entry.description : '',
+    contentZh: entry && typeof entry.content === 'string' ? entry.content : '',
+    contentTranslated: Boolean(entry && typeof entry.content === 'string'),
+    provider:
+      entry && typeof entry.contentProvider === 'string'
+        ? entry.contentProvider
+        : entry && typeof entry.metaProvider === 'string'
+          ? entry.metaProvider
+          : '',
+    translatedAt: entry && Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+  }
+}
+
+async function translateSkillFor(ctx, body) {
+  const name = String(body.name || '')
+  if (!safeName(name)) throw new Error('invalid skill name')
+  const meta = await readSkill(name)
+  const state = await loadCache()
+  const existing = cachedEntry(state, meta.name, meta.fingerprint)
+  if (existing && typeof existing.content === 'string') {
+    let refreshed = existing
+    if (!existing.title || (!existing.description && meta.description)) {
+      try {
+        await translateOneMetadata(ctx, state, meta)
+        refreshed = cachedEntry(state, meta.name, meta.fingerprint) || existing
+      } catch {
+        // The content is already translated; keep it even if the list fields
+        // could not be refreshed.
+      }
+    }
+    return translatedPayload(meta, refreshed)
+  }
+  if (meta.content.length > MAX_TRANSLATE_CHARS) {
+    throw new Error(`技能内容过大（${meta.content.length} 字符），暂不自动翻译全文；可切换英文查看原文`)
+  }
+
+  const result = await once(contentJobs, `${meta.name}:${meta.fingerprint}`, async () => {
+    let current = cachedEntry(state, meta.name, meta.fingerprint)
+    if (!current || !current.title || (!current.description && meta.description)) {
+      await translateOneMetadata(ctx, state, meta)
+      current = cachedEntry(state, meta.name, meta.fingerprint)
+    }
+    if (!current) current = { fingerprint: meta.fingerprint }
+
+    let translated
+    try {
+      translated = await translateContent(ctx.get('translator'), meta.content)
+    } catch (error) {
+      throw new Error(translationFailure(error))
+    }
+
+    const entry = {
+      ...current,
+      fingerprint: meta.fingerprint,
+      content: translated.text,
+      contentProvider: translated.provider,
+      updatedAt: Date.now(),
+    }
+    state.skills[meta.name] = entry
+    await saveCache()
+    return entry
+  })
+
+  return translatedPayload(meta, result)
 }

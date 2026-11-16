@@ -65,6 +65,23 @@ window.__ModuleLoader__.load({
         updating: '正在更新…',
         detailLabel: '技能详情',
         version: '版本',
+        displayLanguage: '内容语言',
+        langZh: '中文',
+        langEn: 'English',
+        translateHint: '中文显示会调用 DSH 翻译服务；代码、命令和链接保留原文。',
+        translating: '正在翻译技能信息…',
+        translatingContent: '正在翻译技能全文，首次可能需要几秒…',
+        translationFailed: '翻译失败，已显示原文',
+        translatedNote: '以下由 DSH 翻译服务自动翻译，代码、命令和链接保留原文。',
+        originalNote: '当前显示原文；点「查看中文翻译」可切回。',
+        showOriginal: '查看原文',
+        showTranslation: '查看中文翻译',
+        retryTranslation: '重试翻译',
+        tagGlobal: '全局',
+        tagLocal: '本地',
+        tagScripts: '含脚本',
+        tagReferences: '含参考',
+        tagDisabled: '已停用',
       },
       en: {
         panel: 'Skills',
@@ -122,6 +139,23 @@ window.__ModuleLoader__.load({
         updating: 'Updating…',
         detailLabel: 'Skill details',
         version: 'Version',
+        displayLanguage: 'Content language',
+        langZh: '中文',
+        langEn: 'English',
+        translateHint: 'Chinese display uses the DSH translation service; code, commands and links stay in their original form.',
+        translating: 'Translating skill details…',
+        translatingContent: 'Translating the full skill. The first run can take a few seconds…',
+        translationFailed: 'Translation failed; showing the original',
+        translatedNote: 'Automatically translated by the DSH translation service; code, commands and links stay in their original form.',
+        originalNote: 'Showing the original; choose Show Chinese to switch back.',
+        showOriginal: 'Show original',
+        showTranslation: 'Show Chinese',
+        retryTranslation: 'Retry translation',
+        tagGlobal: 'Global',
+        tagLocal: 'Local',
+        tagScripts: 'Scripts',
+        tagReferences: 'References',
+        tagDisabled: 'Disabled',
       },
     }
 
@@ -134,6 +168,11 @@ window.__ModuleLoader__.load({
 .skm-heading h1 { margin: 0; font-size: 26px; line-height: 34px; font-weight: 600; letter-spacing: -0.01em; }
 .skm-heading p { margin: 4px 0 0; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-secondary); }
 .skm-tools { display: flex; flex: none; align-items: center; gap: 10px; }
+.skm-lang { display: inline-flex; flex: none; align-items: center; height: 30px; padding: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 15px; background: var(--dsw-alias-bg-layer-1); }
+.skm-lang button { height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 24px; cursor: pointer; }
+.skm-lang button[data-active='true'] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.skm-lang button:hover { color: var(--dsw-alias-label-primary); }
+.skm-lang button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
 .skm-search { display: flex; align-items: center; gap: 8px; width: 260px; height: 36px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 18px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); transition: border-color 120ms ease; }
 .skm-search:focus-within { border-color: var(--dsw-alias-brand-primary); }
 .skm-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
@@ -174,8 +213,15 @@ window.__ModuleLoader__.load({
 .skm-modal-head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 24px 14px; }
 .skm-modal-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 48px; height: 48px; }
 .skm-modal-titlewrap { flex: 1; min-width: 0; }
-.skm-modal-title { margin: 2px 0 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.skm-modal-title { margin: 2px 0 0; font-size: 20px; line-height: 28px; font-weight: 600; overflow-wrap: anywhere; }
 .skm-modal-desc { margin: 4px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 19px; }
+.skm-original-name { margin: 3px 0 0; color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
+.skm-translation-status { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 17px; }
+.skm-translation-status span { min-width: 0; overflow-wrap: anywhere; }
+.skm-link { flex: none; padding: 0; border: 0; background: transparent; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 11px; line-height: 17px; cursor: pointer; }
+.skm-link:hover { text-decoration: underline; }
+.skm-content-bar { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; padding: 8px 0 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 17px; }
+.skm-content-bar span { flex: 1; min-width: 180px; overflow-wrap: anywhere; }
 .skm-modal-actions { display: flex; flex: none; align-items: center; gap: 6px; }
 .skm-switch { box-sizing: border-box; position: relative; flex: 0 0 auto; width: 36px; height: 20px; padding: 2px; border: 0; border-radius: 999px; corner-shape: round; background: var(--dsw-alias-border-l3); cursor: pointer; transition: background-color 120ms ease; }
 .skm-switch[aria-checked='true'] { background: var(--dsw-alias-brand-primary); }
@@ -202,6 +248,10 @@ window.__ModuleLoader__.load({
 .skm-markdown code { padding: 1px 5px; border-radius: 5px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
 .skm-markdown pre code { padding: 0; background: transparent; }
 .skm-markdown blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.skm-table-wrap { margin: 10px 0; overflow-x: auto; }
+.skm-markdown table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 18px; }
+.skm-markdown th, .skm-markdown td { padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l1); vertical-align: top; }
+.skm-markdown th { background: var(--dsw-alias-bg-layer-2); font-weight: 600; }
 .skm-markdown hr { margin: 14px 0; border: 0; border-top: 1px solid var(--dsw-alias-border-l1); }
 .skm-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 6px; }
 .skm-tag { padding: 2px 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 18px; }
@@ -403,6 +453,74 @@ window.__ModuleLoader__.load({
           i += 1
           continue
         }
+        const tableSeparator = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/
+        if (/\|/.test(line) && i + 1 < lines.length && tableSeparator.test(lines[i + 1])) {
+          const parseRow = (row) =>
+            row
+              .trim()
+              .replace(/^\|/, '')
+              .replace(/\|$/, '')
+              .split('|')
+              .map((cell) => cell.trim())
+          const header = parseRow(line)
+          const separators = parseRow(lines[i + 1])
+          const alignments = separators.map((cell) => {
+            const left = cell.startsWith(':')
+            const right = cell.endsWith(':')
+            if (left && right) return 'center'
+            if (right) return 'right'
+            return 'left'
+          })
+          i += 2
+          const rows = []
+          while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+            rows.push(parseRow(lines[i]))
+            i += 1
+          }
+          out.push(
+            h(
+              'div',
+              { className: 'skm-table-wrap', key: key++ },
+              h(
+                'table',
+                null,
+                h(
+                  'thead',
+                  null,
+                  h(
+                    'tr',
+                    null,
+                    header.map((cell, index) =>
+                      h(
+                        'th',
+                        { key: index, style: { textAlign: alignments[index] || 'left' } },
+                        inline(cell),
+                      ),
+                    ),
+                  ),
+                ),
+                h(
+                  'tbody',
+                  null,
+                  rows.map((row, rowIndex) =>
+                    h(
+                      'tr',
+                      { key: rowIndex },
+                      row.map((cell, cellIndex) =>
+                        h(
+                          'td',
+                          { key: cellIndex, style: { textAlign: alignments[cellIndex] || 'left' } },
+                          inline(cell),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+          continue
+        }
         if (line.trim() === '') {
           i += 1
           continue
@@ -456,8 +574,36 @@ window.__ModuleLoader__.load({
       const [menuOpen, setMenuOpen] = React.useState(false)
       const [confirmRemove, setConfirmRemove] = React.useState(false)
       const [toast, setToast] = React.useState(null)
+      const [lang, setLang] = React.useState(() => {
+        try {
+          const saved = window.localStorage.getItem('skm.lang')
+          if (saved === 'zh' || saved === 'en') return saved
+        } catch {
+          // private mode or a blocked storage API: keep the Chinese default
+        }
+        return 'zh'
+      })
+      const [translating, setTranslating] = React.useState(false)
+      const [translationError, setTranslationError] = React.useState('')
+      const [detailTranslating, setDetailTranslating] = React.useState(false)
+      const [detailTranslationError, setDetailTranslationError] = React.useState('')
+      const [showOriginal, setShowOriginal] = React.useState(false)
       const toastTimer = React.useRef(null)
       const mounted = React.useRef(true)
+      const attemptedTranslations = React.useRef(new Set())
+      const detailRequested = React.useRef('')
+
+      React.useEffect(() => {
+        try {
+          window.localStorage.setItem('skm.lang', lang)
+        } catch {
+          // the switch still works for this session
+        }
+      }, [lang])
+
+      React.useEffect(() => {
+        setShowOriginal(false)
+      }, [lang])
 
       const notify = React.useCallback((text, tone = 'ok') => {
         setToast({ text, tone })
@@ -496,6 +642,125 @@ window.__ModuleLoader__.load({
         }
       }, [load])
 
+      const translateMissingMetadata = React.useCallback(
+        async (list) => {
+          if (lang !== 'zh') return
+          const missing = list.filter((skill) => {
+            if (!skill || !skill.name) return false
+            const key = `${skill.name}:${skill.fingerprint || ''}`
+            if (attemptedTranslations.current.has(key)) return false
+            return !skill.titleZh || (!skill.descriptionZh && skill.description)
+          })
+          if (missing.length === 0) return
+
+          for (const skill of missing) {
+            attemptedTranslations.current.add(`${skill.name}:${skill.fingerprint || ''}`)
+          }
+          setTranslating(true)
+          setTranslationError('')
+          try {
+            const data = await api('/translate-metadata', {
+              method: 'POST',
+              body: JSON.stringify({ names: missing.map((skill) => skill.name) }),
+            })
+            if (!mounted.current) return
+            const translated = Array.isArray(data.skills) ? data.skills : []
+            if (translated.length > 0) {
+              setSkills((current) =>
+                current.map((skill) => {
+                  const update = translated.find((item) => item && item.name === skill.name)
+                  return update ? { ...skill, ...update } : skill
+                }),
+              )
+            }
+            const failures =
+              data.errors && typeof data.errors === 'object'
+                ? Object.values(data.errors).filter(Boolean)
+                : []
+            if (failures.length > 0) setTranslationError(String(failures[0]))
+          } catch (cause) {
+            if (mounted.current) {
+              setTranslationError(cause instanceof Error ? cause.message : String(cause))
+            }
+          } finally {
+            if (mounted.current) setTranslating(false)
+          }
+        },
+        [lang],
+      )
+
+      React.useEffect(() => {
+        if (lang === 'zh' && !loading && skills.length > 0) translateMissingMetadata(skills)
+      }, [lang, loading, skills, translateMissingMetadata])
+
+      const translateDetail = React.useCallback(
+        async (entry) => {
+          if (!entry || lang !== 'zh') return
+          const key = `${entry.name}:${entry.fingerprint || ''}`
+          if (detailRequested.current === key) return
+          detailRequested.current = key
+          setDetailTranslating(true)
+          setDetailTranslationError('')
+          try {
+            const data = await api('/translate-skill', {
+              method: 'POST',
+              body: JSON.stringify({ name: entry.name }),
+            })
+            if (!mounted.current) return
+            setDetail((current) =>
+              current && current.name === entry.name ? { ...current, ...data } : current,
+            )
+            setSkills((current) =>
+              current.map((skill) => (skill.name === data.name ? { ...skill, ...data } : skill)),
+            )
+          } catch (cause) {
+            if (mounted.current) {
+              setDetailTranslationError(cause instanceof Error ? cause.message : String(cause))
+            }
+          } finally {
+            if (mounted.current) setDetailTranslating(false)
+          }
+        },
+        [lang],
+      )
+
+      React.useEffect(() => {
+        if (lang !== 'zh' || !selected || !detail || detailTranslating || detail.contentTranslated) return
+        const key = `${detail.name}:${detail.fingerprint || ''}`
+        if (detailRequested.current !== key) translateDetail(detail)
+      }, [lang, selected, detail, detailTranslating, translateDetail])
+
+      const retryMetadata = () => {
+        attemptedTranslations.current.clear()
+        setTranslationError('')
+        translateMissingMetadata(skills)
+      }
+
+      const retryDetail = () => {
+        if (!detail) return
+        detailRequested.current = ''
+        setDetailTranslationError('')
+        translateDetail(detail)
+      }
+
+      const shownTitle = (skill) =>
+        lang === 'zh' && skill && skill.titleZh ? skill.titleZh : skill ? skill.title : ''
+      const shownDescription = (skill) =>
+        lang === 'zh' && skill && skill.descriptionZh
+          ? skill.descriptionZh
+          : skill
+            ? skill.description
+            : ''
+
+      const tagLabel = (tag) => {
+        if (tag === '全局') return t('tagGlobal')
+        if (tag === '本地') return t('tagLocal')
+        if (tag === '含脚本') return t('tagScripts')
+        if (tag === '含参考') return t('tagReferences')
+        if (tag === '已停用') return t('tagDisabled')
+        return tag
+      }
+
       const openDetail = React.useCallback(async (skill) => {
         setSelected(skill)
         setDetail(null)
@@ -503,15 +768,21 @@ window.__ModuleLoader__.load({
         setDetailLoading(true)
         setMenuOpen(false)
         setConfirmRemove(false)
+        setDetailTranslationError('')
+        setDetailTranslating(false)
+        setShowOriginal(false)
+        detailRequested.current = ''
         try {
           const data = await api(`/skill?name=${encodeURIComponent(skill.name)}`)
-          if (mounted.current) setDetail(data)
+          if (!mounted.current) return
+          setDetail(data)
+          if (lang === 'zh' && !data.contentTranslated) translateDetail(data)
         } catch (cause) {
           if (mounted.current) setDetailError(cause instanceof Error ? cause.message : String(cause))
         } finally {
           if (mounted.current) setDetailLoading(false)
         }
-      }, [])
+      }, [lang, translateDetail])
 
       const closeDetail = () => {
         if (busy !== '') return
@@ -520,6 +791,10 @@ window.__ModuleLoader__.load({
         setDetailError('')
         setMenuOpen(false)
         setConfirmRemove(false)
+        setDetailTranslationError('')
+        setDetailTranslating(false)
+        setShowOriginal(false)
+        detailRequested.current = ''
       }
 
       const toggle = async (next) => {
@@ -555,6 +830,10 @@ window.__ModuleLoader__.load({
           setSelected(null)
           setDetail(null)
           setConfirmRemove(false)
+          setDetailTranslationError('')
+          setDetailTranslating(false)
+          setShowOriginal(false)
+          detailRequested.current = ''
           await load(true)
           notify(t('remove'))
         } catch (cause) {
@@ -603,8 +882,9 @@ window.__ModuleLoader__.load({
 
       const copyContent = async () => {
         if (!detail) return
+        const body = lang === 'zh' && detail.contentZh && !showOriginal ? detail.contentZh : detail.content
         try {
-          await navigator.clipboard.writeText(detail.content)
+          await navigator.clipboard.writeText(body)
           notify(t('copied'))
         } catch {
           notify(t('copyFailed'), 'error')
@@ -614,7 +894,7 @@ window.__ModuleLoader__.load({
       const trySkill = async () => {
         if (!detail) return
         try {
-          await navigator.clipboard.writeText(`请使用 ${detail.title} 技能：`)
+          await navigator.clipboard.writeText(lang === 'zh' ? `请使用 ${detail.title} 技能：` : `Use the ${detail.title} skill: `)
           notify(t('tryCopied'))
         } catch {
           notify(t('tryCopied'))
@@ -660,9 +940,12 @@ window.__ModuleLoader__.load({
           if (filter === 'enabled' && !skill.enabled) return false
           if (filter === 'disabled' && skill.enabled) return false
           if (q === '') return true
-          return `${skill.title} ${skill.description} ${(skill.tags || []).join(' ')}`.toLowerCase().includes(q)
+          const tags = (skill.tags || []).map((tag) => tagLabel(tag)).join(' ')
+          return `${skill.name} ${skill.title} ${skill.description} ${skill.titleZh || ''} ${skill.descriptionZh || ''} ${tags}`
+            .toLowerCase()
+            .includes(q)
         })
-      }, [skills, query, filter])
+      }, [skills, query, filter, lang])
 
       const enabledCount = skills.filter((skill) => skill.enabled).length
       const disabledCount = skills.length - enabledCount
@@ -674,6 +957,19 @@ window.__ModuleLoader__.load({
       ]
 
       const tags = detail && Array.isArray(detail.tags) ? detail.tags : []
+      const detailTitle = detail ? shownTitle(detail) : selected ? shownTitle(selected) : ''
+      const detailDescription = detail ? shownDescription(detail) : ''
+      const detailOriginalName =
+        lang === 'zh' && detail && detail.titleZh && detail.titleZh !== detail.title ? detail.title : ''
+      const translatedBody =
+        lang === 'zh' && detail && typeof detail.contentZh === 'string' && detail.contentZh !== ''
+      const showingTranslation = Boolean(translatedBody && !showOriginal)
+      const detailBody = detail
+        ? showingTranslation
+          ? detail.contentZh
+          : detail.content
+        : ''
+      const detailHasContentBar = Boolean(lang === 'zh' && detail && (translatedBody || detailTranslating || detailTranslationError))
 
       return h(
         'section',
@@ -697,6 +993,35 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'skm-tools' },
+                h(
+                  'div',
+                  {
+                    className: 'skm-lang',
+                    role: 'group',
+                    'aria-label': t('displayLanguage'),
+                    title: t('translateHint'),
+                  },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      'data-active': lang === 'zh' ? 'true' : 'false',
+                      'aria-pressed': lang === 'zh' ? 'true' : 'false',
+                      onClick: () => setLang('zh'),
+                    },
+                    t('langZh'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      'data-active': lang === 'en' ? 'true' : 'false',
+                      'aria-pressed': lang === 'en' ? 'true' : 'false',
+                      onClick: () => setLang('en'),
+                    },
+                    t('langEn'),
+                  ),
+                ),
                 h(
                   'div',
                   { className: 'skm-search' },
@@ -755,6 +1080,22 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
+            lang === 'zh' && (translating || translationError)
+              ? h(
+                  'div',
+                  { className: 'skm-translation-status', title: translationError || undefined },
+                  h(
+                    'span',
+                    null,
+                    translating
+                      ? t('translating')
+                      : `${t('translationFailed')}${translationError ? `：${translationError}` : ''}`,
+                  ),
+                  !translating && translationError
+                    ? h('button', { type: 'button', className: 'skm-link', onClick: retryMetadata }, t('retryTranslation'))
+                    : null,
+                )
+              : null,
             h(
               'div',
               { className: 'skm-section' },
@@ -802,7 +1143,8 @@ window.__ModuleLoader__.load({
                               key: skill.name,
                               type: 'button',
                               className: 'skm-card',
-                              'aria-label': skill.title,
+                              title: skill.name,
+                              'aria-label': shownTitle(skill),
                               onClick: () => openDetail(skill),
                             },
                             h('span', { className: 'skm-card-icon' }, h(CubeIcon, { size: 38 })),
@@ -812,7 +1154,7 @@ window.__ModuleLoader__.load({
                               h(
                                 'span',
                                 { className: 'skm-card-name' },
-                                skill.title,
+                                shownTitle(skill),
                                 skill.enabled
                                   ? null
                                   : h('span', { className: 'skm-badge' }, t('disabled')),
@@ -820,7 +1162,7 @@ window.__ModuleLoader__.load({
                               h(
                                 'span',
                                 { className: 'skm-card-desc' },
-                                skill.description || t('noDescription'),
+                                shownDescription(skill) || t('noDescription'),
                               ),
                             ),
                             skill.enabled
@@ -861,11 +1203,20 @@ window.__ModuleLoader__.load({
                   h(
                     'div',
                     { className: 'skm-modal-titlewrap' },
-                    h('h2', { className: 'skm-modal-title' }, `${detail ? detail.title : selected.title} Skill`),
+                    h(
+                      'h2',
+                      { className: 'skm-modal-title' },
+                      lang === 'zh'
+                        ? detailTitle
+                        : `${detail ? detail.title : selected.title} Skill`,
+                    ),
+                    detailOriginalName
+                      ? h('p', { className: 'skm-original-name' }, detailOriginalName)
+                      : null,
                     h(
                       'p',
                       { className: 'skm-modal-desc' },
-                      detail ? detail.description || t('noDescription') : '',
+                      detail ? detailDescription || t('noDescription') : '',
                     ),
                   ),
                   h(
@@ -934,12 +1285,51 @@ window.__ModuleLoader__.load({
                             t('retry'),
                           ),
                         )
-                      : h('div', { className: 'skm-markdown' }, renderMarkdown(detail ? detail.content : '')),
+                      : h(
+                          'div',
+                          null,
+                          detailHasContentBar
+                            ? h(
+                                'div',
+                                { className: 'skm-content-bar' },
+                                h(
+                                  'span',
+                                  { title: detailTranslationError || undefined, 'aria-live': 'polite' },
+                                  detailTranslating
+                                    ? t('translatingContent')
+                                    : detailTranslationError
+                                      ? `${t('translationFailed')}${detailTranslationError ? `：${detailTranslationError}` : ''}`
+                                      : showOriginal
+                                        ? t('originalNote')
+                                        : t('translatedNote'),
+                                ),
+                                translatedBody
+                                  ? h(
+                                      'button',
+                                      {
+                                        type: 'button',
+                                        className: 'skm-link',
+                                        onClick: () => setShowOriginal((value) => !value),
+                                      },
+                                      showOriginal ? t('showTranslation') : t('showOriginal'),
+                                    )
+                                  : null,
+                                detailTranslationError
+                                  ? h(
+                                      'button',
+                                      { type: 'button', className: 'skm-link', onClick: retryDetail },
+                                      t('retryTranslation'),
+                                    )
+                                  : null,
+                              )
+                            : null,
+                          h('div', { className: 'skm-markdown' }, renderMarkdown(detailBody)),
+                        ),
                   tags.length > 0
                     ? h(
                         'div',
                         { className: 'skm-tags' },
-                        tags.map((tag) => h('span', { key: tag, className: 'skm-tag' }, tag)),
+                        tags.map((tag) => h('span', { key: tag, className: 'skm-tag' }, tagLabel(tag))),
                       )
                     : null,
                 ),
